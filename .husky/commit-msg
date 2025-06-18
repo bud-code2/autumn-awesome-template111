@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# Define the allowed commit message types (e.g., [Add], [Fix])
+# These must be in PascalCase as per the 'type-case' rule.
+ALLOWED_COMMIT_TYPES=(
+  "add:"
+  "fix:"
+  "update:"
+  "remove:"
+  "refactor:"
+  "docs:"
+  "test:"
+  "chore:"
+)
+
+# The path to the commit message file is passed as the first argument to the 'commit-msg' hook.
+COMMIT_MSG_FILE="$1"
+
+# Check if the commit message file path was provided
+if [ -z "$COMMIT_MSG_FILE" ]; then
+  echo "[commit-msg] Error: No commit message file provided to the hook." >&2
+  exit 1
+fi
+
+# Read the first line of the commit message (which usually contains the type and subject)
+# We trim whitespace for robustness using xargs.
+COMMIT_MESSAGE=$(head -n 1 "$COMMIT_MSG_FILE" | xargs)
+
+# Extract and Validate Commit Type (type-enum rule)
+if [[ "$COMMIT_MESSAGE" =~ ^\[([a-zA-Z]+)\] ]]; then
+  EXTRACTED_TYPE="[${BASH_REMATCH[1]}]"
+else
+  echo "" >&2
+  echo "[commit-msg] Error: Commit message must start with a valid type in square brackets (e.g., '[Add]')." >&2
+  echo "    Example: [Add] Implement user authentication" >&2
+  echo "" >&2
+  exit 1
+fi
+
+# Check if the extracted type is in the allowed list
+TYPE_IS_VALID=false
+for allowed_type in "${ALLOWED_COMMIT_TYPES[@]}"; do
+  if [[ "$EXTRACTED_TYPE" == "$allowed_type" ]]; then
+    TYPE_IS_VALID=true
+    break
+  fi
+done
+
+if [ "$TYPE_IS_VALID" == "false" ]; then
+  echo "" >&2
+  echo "[commit-msg] Error: Invalid commit type '$EXTRACTED_TYPE'." >&2
+  echo "    Allowed types are: $(IFS=', '; echo "${ALLOWED_COMMIT_TYPES[*]}")" >&2
+  echo "" >&2
+  exit 1
+fi
+
+# Validate Type Case (type-case: PascalCase rule)
+TYPE_FOR_CASE_CHECK=$(echo "$EXTRACTED_TYPE" | sed 's/^\[//;s/\]$//')
+
+if ! [[ "$TYPE_FOR_CASE_CHECK" =~ ^[A-Z][a-zA-Z]*$ ]]; then
+  echo "" >&2
+  echo "[commit-msg] Error: Commit type '$TYPE_FOR_CASE_CHECK' must be in PascalCase (e.g., 'Add', 'Refactor')." >&2
+  echo "" >&2
+  exit 1
+fi
+
+# --- Final Success Message ---
+echo "[commit-msg] Success: Commit message type '$EXTRACTED_TYPE' is valid."
+exit 0

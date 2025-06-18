@@ -1,0 +1,45 @@
+#!/bin/sh
+
+# Default behavior: run both frontend and backend tests
+RUN_FRONTEND_TESTS=true
+RUN_BACKEND_TESTS=true
+
+# Check for explicit commands via environment variables
+# If PUSH_FRONTEND_TESTS is "true" and PUSH_BACKEND_TESTS is "true", run both explicitly.
+if [ "$PUSH_FRONTEND_TESTS" = "true" ] && [ "$PUSH_BACKEND_TESTS" = "true" ]; then
+  RUN_FRONTEND_TESTS=true
+  RUN_BACKEND_TESTS=true
+  echo "--- PUSH_FRONTEND_TESTS=true and PUSH_BACKEND_TESTS=true: Running BOTH Frontend and Backend Tests ---"
+elif [ "$PUSH_FRONTEND_TESTS" = "true" ]; then
+  # If ONLY PUSH_FRONTEND_TESTS is true, run ONLY frontend tests
+  RUN_FRONTEND_TESTS=true
+  RUN_BACKEND_TESTS=false
+  echo "--- PUSH_FRONTEND_TESTS=true: Running ONLY Frontend Tests ---"
+elif [ "$PUSH_BACKEND_TESTS" = "true" ]; then
+  # If ONLY PUSH_BACKEND_TESTS is true, run ONLY backend tests
+  RUN_BACKEND_TESTS=true
+  RUN_FRONTEND_TESTS=false
+  echo "--- PUSH_BACKEND_TESTS=true: Running ONLY Backend Tests ---"
+else
+  # If no specific command is given, run both by default (as per initial setting)
+  echo "--- No specific test command given. Running both frontend and backend tests by default. ---"
+  # RUN_FRONTEND_TESTS and RUN_BACKEND_TESTS are already true from default setting
+fi
+
+# # Now, execute based on the final decision
+# if $RUN_FRONTEND_TESTS; then
+#    echo "--- Running Frontend Tests ---"
+#    npm --prefix webapp test || exit 1 # Exit if tests fail
+# fi
+
+# if $RUN_BACKEND_TESTS; then
+#    echo "--- Running Backend Tests ---"
+#    go test ./server/... || exit 1 # Exit if tests fail
+# fi
+
+# Final check if no tests were run (should only happen if specific flags set them to false)
+if ! $RUN_FRONTEND_TESTS && ! $RUN_BACKEND_TESTS; then
+  echo "No tests were executed based on the current configuration. This might happen if specific flags were set to false without enabling other tests."
+fi
+
+echo "Pre-push hook finished."

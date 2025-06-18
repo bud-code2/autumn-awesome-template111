@@ -1,0 +1,14 @@
+{
+  "devDependencies": {
+    "husky": "^9.1.7"
+  },
+  "scripts": {
+    "prepare": "husky"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "sh .husky/pre-commit.sh",
+      "commit-msg": "sh .husky/commit-msg.sh $1"
+    }
+  }
+}

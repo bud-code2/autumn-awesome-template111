@@ -1,0 +1,137 @@
+name: cd-webapp-dev
+
+on:
+  workflow_call:
+    inputs:
+      env:
+        required: true
+        type: string
+      terraform_env_dir:
+        required: true
+        type: string
+      autodeploy:
+        required: true
+        type: boolean
+
+jobs:
+  deploy:
+    name: Terrform deploy
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.env }}
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: 'webapp/package-lock.json'
+
+      - name: Install OpenNext
+        working-directory: webapp
+        run: npm install -g @opennextjs/aws
+
+      - name: Build Next.JS with OpenNext
+        working-directory: webapp
+        run: |
+          npm run build
+          open-next build
+
+      - name: Get Terraform version
+        id: get_terraform_version
+        working-directory: ${{ inputs.terraform_env_dir }}
+        run: |
+          TF_VERSION=$(grep 'required_version' terraform.tf | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')
+          echo "TF_VERSION=$TF_VERSION" >> $GITHUB_ENV
+          echo TF_VERSION
+          echo $TF_VERSION
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        id: aws_credentials
+        with:
+          role-to-assume: ${{ secrets.OIDC_ROLE_ARN }}
+          aws-region: "ap-northeast-1"
+          output-credentials: true
+
+      - name: Add profile credentials
+        env:
+          AWS_ACCESS_KEY_ID: ${{ steps.aws_credentials.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.aws_credentials.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.aws_credentials.outputs.aws-session-token }}
+        run: |
+          aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID --profile default
+          aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY --profile default
+          aws configure set aws_session_token $AWS_SESSION_TOKEN --profile default
+      
+      - name: Set environment variables
+        run: |
+          echo "Setting environment variables..."
+          echo "TF_VAR_profile=default" >> $GITHUB_ENV
+          echo "TF_VAR_project=${{ secrets.PROJECT_NAME }}" >> $GITHUB_ENV
+          echo "TF_VAR_aws_region=${{ secrets.AWS_REGION }}" >> $GITHUB_ENV
+          echo "Environment variables set."
+
+      - name: Cache Terraform
+        uses: actions/cache@v3
+        with:
+          path: "${{ inputs.terraform_env_dir }}/.terraform"
+          key: ${{ runner.os }}-${{ inputs.env }}-terraform-${{ hashFiles('**/*.tf') }}
+          
+      - name: Terraform Init
+        working-directory: ${{ inputs.terraform_env_dir }}
+        run: terraform init -input=false -backend-config "profile=default"
+      
+      - name: Terraform Plan
+        working-directory: ${{ inputs.terraform_env_dir }}
+        run: terraform plan -out=tfplan
+      
+      - name: Terraform Show Plan
+
+        working-directory: ${{ inputs.terraform_env_dir }}
+        run: terraform show tfplan
+
+      # - name: Manual Approval
+      #   if: ${{ inputs.autodeploy == false }}
+      #   uses: trstringer/manual-approval@v1
+      #   with:
+      #     secret: ${{ github.TOKEN }}
+      #     approvers: bud-code
+      #     minimum-approvals: 1
+      #     issue-title: "Deploying to ${{ inputs.env }} environment"
+      #     issue-body: "Please approve or deny the deployment \n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      #     exclude-workflow-initiator-as-approver: false
+      #     additional-approved-words: 'LGTM,APPROVE,YES'
+      #     additional-denied-words: 'DENY,DENIED,NO'
+      
+      - name: Terraform Apply
+        working-directory: ${{ inputs.terraform_env_dir }}
+        run: terraform apply -auto-approve tfplan
+
+      # - name: Extract CloudFront Distribution ID
+      #   id: extract-cloudfront-id
+      #   working-directory: ${{ inputs.environment_directory }}
+      #   run: |
+      #     # Extract CloudFront distribution ID from Terraform output
+      #     CF_DIST_ID=$(terraform output -raw nextjs_cloudfront_distribution_id)
+      #     echo "cloudfront_id=$CF_DIST_ID" >> $GITHUB_OUTPUT
+      #     echo "CloudFront Distribution ID: $CF_DIST_ID"
+
+      # - name: Invalidate CloudFront Cache
+      #   run: |
+      #     echo "Invalidating CloudFront cache for distribution ${{ steps.extract-cloudfront-id.outputs.cloudfront_id }}..."
+      #     # Create invalidation for all paths
+      #     aws cloudfront create-invalidation \
+      #       --distribution-id ${{ steps.extract-cloudfront-id.outputs.cloudfront_id }} \
+      #       --paths "/*"
+      #     echo "CloudFront cache invalidation initiated."
+
+          

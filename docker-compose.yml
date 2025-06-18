@@ -1,0 +1,75 @@
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: autumn-server
+    ports:
+      - "${SERVER_PORT:-8000}:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./server/app:/build/app
+      - ./server/alembic:/build/alembic
+      - ./server/alembic.ini:/build/alembic.ini
+      - ./server/pyproject.toml:/build/pyproject.toml
+    command: [
+      "uvicorn", "app.main:app",
+      "--host", "0.0.0.0",
+      "--port", "8000",
+      "--reload"
+    ]
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    networks:
+      - app_network
+    restart: unless-stopped
+
+  webapp:
+    build:
+      context: ./webapp
+      dockerfile: Dockerfile
+    container_name: autumn-webapp
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./webapp:/app
+      - /app/node_modules
+    env_file:
+      - .env
+    depends_on:
+      - server
+    networks:
+      - app_network
+    restart: unless-stopped
+
+
+  postgres_db:
+    container_name: autumn-pg
+    image: postgres:17
+    volumes:
+      - postgres_db_volume:/var/lib/postgresql/data
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_DB=autumn
+      - POSTGRES_USER=leaf1
+      - POSTGRES_PASSWORD=ligma12345
+    ports:
+      - "5435:${DATABASE__PORT}"
+    networks:
+      - app_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U leaf1 -d autumn"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_db_volume:
+
+networks:
+  app_network:
+    driver: bridge

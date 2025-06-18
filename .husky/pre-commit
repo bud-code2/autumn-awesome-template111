@@ -1,0 +1,74 @@
+#!/bin/bash
+
+# Define allowed exact branch names
+ALLOWED_BRANCH_NAMES=("main" "stg" "develop")
+
+# Define allowed prefixes for feature, hotfix, and fix branches
+# The pattern will be: prefix/alphanumeric_with_optional_dashes_or_underscores
+ALLOWED_PREFIXES=("feature" "hotfix" "fix")
+
+getCurrentBranchName() {
+  local branch=$(git rev-parse --abbrev-ref HEAD)
+  if [ -z "$branch" ]; then
+    echo "[pre-commit] Error: Unable to determine the current branch." >&2
+    exit 1
+  fi
+  echo "$branch"
+}
+
+BRANCH_NAME=$(getCurrentBranchName)
+IS_VALID_BRANCH_NAME=false
+
+# Check if the branch name is one of the exactly allowed names
+for allowed_name in "${ALLOWED_BRANCH_NAMES[@]}"; do
+  if [[ "$BRANCH_NAME" == "$allowed_name" ]]; then
+    IS_VALID_BRANCH_NAME=true
+    break
+  fi
+done
+
+# If not already valid, check if it matches the allowed prefix pattern
+if [ "$IS_VALID_BRANCH_NAME" == "false" ]; then
+  REGEX_PATTERN="^($(IFS='|'; echo "${ALLOWED_PREFIXES[*]}"))/[a-zA-Z0-9]+([_-][a-zA-Z0-9]+)*$"
+  if [[ "$BRANCH_NAME" =~ $REGEX_PATTERN ]]; then
+    IS_VALID_BRANCH_NAME=true
+  fi
+fi
+
+# If the branch name is invalid, abort the commit
+if [ "$IS_VALID_BRANCH_NAME" == "false" ]; then
+  ALLOWED_PREFIXES_STR=$(IFS=', '; echo "${ALLOWED_PREFIXES[*]}")
+  ALLOWED_BRANCH_NAMES_STR=$(IFS=', '; echo "${ALLOWED_BRANCH_NAMES[*]}")
+
+  echo "" >&2
+  echo "[pre-commit] Error: Your branch name '$BRANCH_NAME' does not comply with the naming convention." >&2
+  echo "    Branch names must start with one of: ${ALLOWED_PREFIXES_STR}/[alphanumeric-with-dashes-or-underscores]" >&2
+  echo "    OR be one of the exact names: ${ALLOWED_BRANCH_NAMES_STR}." >&2
+  echo "" >&2
+  echo "    Commit aborted." >&2
+  exit 1
+fi
+
+echo "[pre-commit] Success: Branch name '$BRANCH_NAME' is valid."
+
+# Run webapp linting
+echo "[pre-commit] Running webapp linting..."
+cd webapp && npm run lint
+if [ $? -ne 0 ]; then
+  echo "[pre-commit] Error: Webapp linting failed." >&2
+  exit 1
+fi
+cd ..
+
+# Run server type checking and linting
+echo "[pre-commit] Running server type checking and linting..."
+cd server && poetry run mypy . && poetry run ruff check .
+if [ $? -ne 0 ]; then
+  echo "[pre-commit] Error: Server type checking or linting failed." >&2
+  exit 1
+fi
+cd ..
+
+echo "[pre-commit] All checks passed successfully."
+exit 0
+

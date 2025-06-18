@@ -1,0 +1,47 @@
+name: ci-dev
+
+on:
+  pull_request: 
+    branches:
+      - develop
+    paths:
+      - "webapp/src/**"
+      - "server/**"
+    types: [synchronize, reopened, opened]
+
+jobs:
+  ci-webapp-dev:
+    name: ci-webapp-dev
+    permissions: # Explicitly define the permissions granted to the GITHUB_TOKEN for this job
+      contents: write # Allows writing to the repository content
+      checks: write # Allows creating and updating GitHub Checks (e.g., status checks for PRs)
+      pull-requests: write # Allows interacting with pull requests (e.g., adding comments)
+      id-token: write # Allows requesting OIDC (OpenID Connect) tokens for cloud provider authentication
+      security-events: write # Allows submitting security events (e.g., vulnerability scans)
+      actions: read # Allows reading metadata about other GitHub Actions
+
+    uses: ./.github/workflows/ci-webapp.yml
+    secrets: inherit # Passes all secrets available to this workflow to the called 'ci.yml' workflow
+    with:
+      env: "dev"
+      linter_for_committed_files_only: true
+      run_server_jobs: true
+      run_webapp_jobs: true
+
+  ci-server-dev:
+    name: ci-server-dev
+    permissions: # Explicitly define the permissions granted to the GITHUB_TOKEN for this job
+      contents: write # Allows writing to the repository content
+      checks: write # Allows creating and updating GitHub Checks (e.g., status checks for PRs)
+      pull-requests: write # Allows interacting with pull requests (e.g., adding comments)
+      id-token: write # Allows requesting OIDC (OpenID Connect) tokens for cloud provider authentication
+      security-events: write # Allows submitting security events (e.g., vulnerability scans)
+      actions: read # Allows reading metadata about other GitHub Actions
+
+    uses: ./.github/workflows/ci-server.yml
+    secrets: inherit # Passes all secrets available to this workflow to the called 'ci.yml' workflow
+    with:
+      env: "dev"
+      linter_for_committed_files_only: true
+      run_server_jobs: true
+      run_webapp_jobs: true
